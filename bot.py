@@ -5,109 +5,124 @@ import os
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ដាក់ ID គ្រុបអ្នកគ្រប់គ្រង (Admin Group ID) ដែលបងបានផ្ដល់ឲ្យ
 ADMIN_GROUP_ID = "-1003875548933"
 
-# មុខងារសម្រាប់បង្កើតប៊ូតុងទំព័រដើម 
+# កន្លែងផ្ទុកទឹកប្រាក់អតិថិជន និងការបញ្ជាទិញបណ្ដោះអាសន្ន
+user_balances = {}
+pending_orders = {}
+
 def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_account = KeyboardButton("👤 គណនី")
-    btn_topup = KeyboardButton("🎮 GAME TOPUP")
-    btn_deposit = KeyboardButton("💵 ដាក់ប្រាក់")
-    btn_admin = KeyboardButton("👨‍💻 អ្នកគ្រប់គ្រង")
-    
-    markup.add(btn_account, btn_topup, btn_deposit, btn_admin)
+    markup.add(
+        KeyboardButton("👤 គណនី"), KeyboardButton("🎮 GAME TOPUP"),
+        KeyboardButton("💵 ដាក់ប្រាក់"), KeyboardButton("👨‍💻 អ្នកគ្រប់គ្រង")
+    )
     return markup
 
-# មុខងារសម្រាប់បង្កើតប៊ូតុងបញ្ជីហ្គេម
 def get_game_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_roblox = KeyboardButton("Roblox")
-    btn_ml = KeyboardButton("Mobile Legends")
-    btn_ff = KeyboardButton("Free Fire")
-    btn_back = KeyboardButton("🔙 ត្រឡប់ក្រោយ")
-    
-    markup.add(btn_roblox, btn_ml, btn_ff)
-    markup.add(btn_back)
+    markup.add(KeyboardButton("Roblox"), KeyboardButton("Mobile Legends"), KeyboardButton("Free Fire"))
+    markup.add(KeyboardButton("🔙 ត្រឡប់ក្រោយ"))
     return markup
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.send_message(message.chat.id, "សួស្តី! សូមស្វាគមន៍មកកាន់សេវាកម្មរបស់យើងខ្ញុំ។ សូមជ្រើសរើសសេវាកម្មនៅខាងក្រោម៖", reply_markup=get_main_menu())
 
-@bot.message_handler(func=lambda message: message.text == "🎮 GAME TOPUP")
-def handle_game_topup(message):
-    bot.send_message(message.chat.id, "សូមជ្រើសរើសហ្គេមដែលអ្នកចង់ Top Up ខាងក្រោម៖", reply_markup=get_game_menu())
-
 @bot.message_handler(func=lambda message: message.text == "👤 គណនី")
 def handle_account(message):
     user_id = message.from_user.id
     username = message.from_user.username
-    
     username_text = f"@{username}" if username else "មិនមាន"
-    balance = 0.00
+    
+    # ទាញយកទឹកប្រាក់របស់អតិថិជន
+    balance = user_balances.get(user_id, 0.0)
         
-    text = f"**ព័ត៌មានគណនីរបស់អ្នក៖**\n\n🆔 ID: `{user_id}`\n👤 Username: {username_text}\n💰 ទឹកប្រាក់ចំនួន: `${balance}`"
+    text = f"**ព័ត៌មានគណនីរបស់អ្នក៖**\n\n🆔 ID: `{user_id}`\n👤 Username: {username_text}\n💰 ទឹកប្រាក់ចំនួន: `${balance:.2f}`"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-# មុខងារពេលអតិថិជនចុចលើឈ្មោះហ្គេមណាមួយ
+@bot.message_handler(func=lambda message: message.text == "🎮 GAME TOPUP")
+def handle_game_topup(message):
+    bot.send_message(message.chat.id, "សូមជ្រើសរើសហ្គេមដែលអ្នកចង់ Top Up ខាងក្រោម៖", reply_markup=get_game_menu())
+
+# ----------------- ចាប់ផ្ដើមការបញ្ជាទិញ TOP UP -----------------
 @bot.message_handler(func=lambda message: message.text in ["Roblox", "Mobile Legends", "Free Fire"])
 def handle_topup_selection(message):
+    user_id = message.from_user.id
+    balance = user_balances.get(user_id, 0.0)
+    
+    # ឆែកមើលបើអត់មានលុយសោះ
+    if balance <= 0:
+        bot.send_message(message.chat.id, "❌ ទឹកប្រាក់របស់អ្នកមិនគ្រប់គ្រាន់ទេ (មាន $0.00)។\nសូមធ្វើការ 💵 ដាក់ប្រាក់ ជាមុនសិន។")
+        return
+        
     game_name = message.text
-    msg = bot.send_message(
-        message.chat.id, 
-        f"អ្នកបានជ្រើសរើសហ្គេម **{game_name}**។\n\nសូមផ្ញើព័ត៌មាន (ID ហ្គេម ឬ ឈ្មោះ) និងចំនួនដែលអ្នកចង់ Top up មកកាន់យើងខ្ញុំនៅទីនេះ។", 
-        parse_mode="Markdown"
-    )
-    # ចាំទទួលព័ត៌មាន ID ហ្គេមពីអតិថិជន
-    bot.register_next_step_handler(msg, process_topup_order, game_name)
+    pending_orders[user_id] = {"game": game_name}
+    msg = bot.send_message(message.chat.id, f"🎮 អ្នកបានជ្រើសរើស: **{game_name}**\n\n💵 តើអ្នកចង់ Top Up អស់ប៉ុន្មានដុល្លារ? (សូមវាយតែលេខ ឧទាហរណ៍: 1.5, 5, 10):", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, process_topup_amount)
 
-# មុខងារបញ្ជូនការបញ្ជាទិញ Top up ទៅកាន់ Group Admin
-def process_topup_order(message, game_name):
-    # បើគាត់ចុចប៊ូតុង Menu ផ្សេង គឺបោះបង់ការទិញ
+def process_topup_amount(message):
+    user_id = message.from_user.id
     if message.text in ["👤 គណនី", "🎮 GAME TOPUP", "💵 ដាក់ប្រាក់", "👨‍💻 អ្នកគ្រប់គ្រង", "🔙 ត្រឡប់ក្រោយ"]:
         bot.send_message(message.chat.id, "❌ បានបោះបង់ការបញ្ជាទិញ។", reply_markup=get_main_menu())
         return
         
+    try:
+        amount = float(message.text)
+        if amount <= 0: raise ValueError
+    except ValueError:
+        msg = bot.send_message(message.chat.id, "⚠️ សូមវាយបញ្ចូលជាតួលេខឲ្យបានត្រឹមត្រូវ (ឧ. 1.5, 5)។ ព្យាយាមម្ដងទៀត៖")
+        bot.register_next_step_handler(msg, process_topup_amount)
+        return
+        
+    balance = user_balances.get(user_id, 0.0)
+    # ឆែកមើលលុយគ្រប់ឬអត់
+    if balance < amount:
+        bot.send_message(message.chat.id, f"❌ ទឹកប្រាក់របស់អ្នកមិនគ្រប់គ្រាន់ទេ!\nអ្នកមាន: `${balance:.2f}` | អ្នកចង់ទិញ: `${amount:.2f}`\n\nសូមធ្វើការដាក់ប្រាក់បន្ថែម។")
+        return
+        
+    pending_orders[user_id]["amount"] = amount
+    msg = bot.send_message(message.chat.id, "✅ លុយក្នុងគណនីគ្រប់គ្រាន់! សូមផ្ញើ **ID ហ្គេម ឬ ឈ្មោះតួអង្គ** របស់អ្នកមកកាន់ទីនេះ៖")
+    bot.register_next_step_handler(msg, process_topup_id)
+
+def process_topup_id(message):
     user_id = message.from_user.id
+    if message.text in ["👤 គណនី", "🎮 GAME TOPUP", "💵 ដាក់ប្រាក់", "👨‍💻 អ្នកគ្រប់គ្រង", "🔙 ត្រឡប់ក្រោយ"]:
+        bot.send_message(message.chat.id, "❌ បានបោះបង់ការបញ្ជាទិញ។", reply_markup=get_main_menu())
+        return
+        
+    order = pending_orders.get(user_id)
+    if not order: return
+    
+    game_name = order["game"]
+    amount = order["amount"]
+    game_id = message.text
     username = message.from_user.username
     username_text = f"@{username}" if username else "មិនមាន"
-    order_details = message.text if message.text else "ផ្ញើជាឯកសារ/រូបភាព"
     
-    bot.send_message(message.chat.id, "✅ យើងខ្ញុំបានទទួលការបញ្ជាទិញរបស់អ្នកហើយ។ សូមមេត្ដារងចាំការត្រួតពិនិត្យពីអ្នកគ្រប់គ្រងបន្តិច។", parse_mode="Markdown")
+    # កាត់លុយភ្លាមៗ
+    user_balances[user_id] -= amount
     
-    caption = f"🎮 **មានការបញ្ជាទិញ TOPUP ថ្មី**\n\n🕹 ហ្គេម: {game_name}\n📝 ព័ត៌មានអតិថិជនផ្ញើមក: {order_details}\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
+    bot.send_message(message.chat.id, f"✅ ការបញ្ជាទិញត្រូវបានបញ្ជូន! (ទឹកប្រាក់ `${amount:.2f}` ត្រូវបានកាត់បណ្ដោះអាសន្ន)\nសូមមេត្ដារងចាំការត្រួតពិនិត្យពីអ្នកគ្រប់គ្រងបន្តិច។", parse_mode="Markdown")
+    
+    caption = f"🎮 **មានការបញ្ជាទិញ TOPUP ថ្មី**\n\n🕹 ហ្គេម: {game_name}\n💵 ចំនួនទឹកប្រាក់: `${amount:.2f}`\n📝 ID ហ្គេម: {game_id}\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
     
     admin_markup = InlineKeyboardMarkup()
-    btn_approve = InlineKeyboardButton("✅ បញ្ជាក់ការទិញ", callback_data=f"topapp_{user_id}")
-    btn_reject = InlineKeyboardButton("❌ បដិសេធ", callback_data=f"toprej_{user_id}")
+    btn_approve = InlineKeyboardButton("✅ បញ្ជាក់ការទិញ", callback_data=f"topapp_{user_id}_{amount}")
+    btn_reject = InlineKeyboardButton("❌ បដិសេធ (ប្រគល់លុយវិញ)", callback_data=f"toprej_{user_id}_{amount}")
     admin_markup.add(btn_approve, btn_reject)
     
-    try:
-        bot.send_message(ADMIN_GROUP_ID, caption, parse_mode="Markdown", reply_markup=admin_markup)
-    except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ សូមអភ័យទោស ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។ (សូម Admin Add Bot ចូល Group {ADMIN_GROUP_ID} ជាមុនសិន)")
+    try: bot.send_message(ADMIN_GROUP_ID, caption, parse_mode="Markdown", reply_markup=admin_markup)
+    except Exception: bot.send_message(message.chat.id, "⚠️ ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។")
 
+# ----------------- ចាប់ផ្ដើមការដាក់ប្រាក់ -----------------
 @bot.message_handler(func=lambda message: message.text == "💵 ដាក់ប្រាក់")
 def handle_deposit(message):
     markup = InlineKeyboardMarkup()
-    btn_confirm = InlineKeyboardButton("✅ បញ្ជាក់ការបង់ប្រាក់", callback_data="confirm_deposit")
-    btn_cancel = InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_deposit")
-    markup.add(btn_confirm)
-    markup.add(btn_cancel)
-
-    text = (
-        "**សូមស្វាគមន៍មកកាន់ការដាក់ប្រាក់!**\n\n"
-        "🏦 **ធនាគារ**: ACLEDA Bank\n"
-        "👤 **ឈ្មោះ**: LY SAEVLONG\n\n"
-        "👉 សូមធ្វើការស្កេន QR Code ខាងលើដើម្បីវេរប្រាក់។ បន្ទាប់ពីវេរប្រាក់រួច សូមចុចប៊ូតុង **✅ បញ្ជាក់ការបង់ប្រាក់** ដើម្បីបញ្ជូនវិក្កយបត្រមកកាន់យើងខ្ញុំ។"
-    )
-    
+    markup.add(InlineKeyboardButton("✅ បញ្ជាក់ការបង់ប្រាក់", callback_data="confirm_deposit"), InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_deposit"))
+    text = "**សូមស្វាគមន៍មកកាន់ការដាក់ប្រាក់!**\n\n🏦 **ធនាគារ**: ACLEDA Bank\n👤 **ឈ្មោះ**: LY SAEVLONG\n\n👉 សូមធ្វើការស្កេន QR Code ខាងលើដើម្បីវេរប្រាក់។ បន្ទាប់ពីវេរប្រាក់រួច សូមចុចប៊ូតុង **✅ បញ្ជាក់ការបង់ប្រាក់**។"
     qr_url = "https://img.sanishtech.com/u/a643db727d41e55abb4f8b49920c49e7.jpeg" 
-    try:
-        bot.send_photo(message.chat.id, qr_url, caption=text, parse_mode="Markdown", reply_markup=markup)
-    except Exception:
-        bot.send_message(message.chat.id, "⚠️ រូបភាព QR មានបញ្ហាក្នុងការទាញយក។\n\n" + text, parse_mode="Markdown", reply_markup=markup)
+    bot.send_photo(message.chat.id, qr_url, caption=text, parse_mode="Markdown", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data in ["confirm_deposit", "cancel_deposit"])
 def handle_deposit_action(call):
@@ -118,75 +133,74 @@ def handle_deposit_action(call):
     elif call.data == "cancel_deposit":
         bot.send_message(call.message.chat.id, "❌ ប្រតិបត្តិការដាក់ប្រាក់ត្រូវបានបោះបង់ដោយជោគជ័យ។")
 
-# មុខងារចាំទទួលយករូបភាពវិក្កយបត្រ និងបញ្ជូនទៅ Group Admin
 def process_receipt(message):
     if message.text in ["👤 គណនី", "🎮 GAME TOPUP", "💵 ដាក់ប្រាក់", "👨‍💻 អ្នកគ្រប់គ្រង", "🔙 ត្រឡប់ក្រោយ"]:
         bot.send_message(message.chat.id, "❌ បានបោះបង់ការដាក់ប្រាក់។", reply_markup=get_main_menu())
         return
-
     if message.content_type == 'photo':
         user_id = message.from_user.id
         username = message.from_user.username
         username_text = f"@{username}" if username else "មិនមាន"
-        
         bot.send_message(message.chat.id, "✅ យើងខ្ញុំបានទទួលវិក្កយបត្ររបស់អ្នកហើយ។ សូមមេត្ដារងចាំការត្រួតពិនិត្យពីអ្នកគ្រប់គ្រងបន្តិច។", parse_mode="Markdown")
-        
         photo_id = message.photo[-1].file_id
         caption = f"🔔 **មានការដាក់ប្រាក់ថ្មី**\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
-        
         admin_markup = InlineKeyboardMarkup()
-        btn_approve = InlineKeyboardButton("✅ ទទួលយក", callback_data=f"depapp_{user_id}")
-        btn_reject = InlineKeyboardButton("❌ បដិសេធ", callback_data=f"deprej_{user_id}")
-        admin_markup.add(btn_approve, btn_reject)
-        
-        try:
-            bot.send_photo(ADMIN_GROUP_ID, photo_id, caption=caption, parse_mode="Markdown", reply_markup=admin_markup)
-        except Exception as e:
-            bot.send_message(message.chat.id, f"⚠️ សូមអភ័យទោស ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។ (សូម Admin Add Bot ចូល Group {ADMIN_GROUP_ID} ជាមុនសិន)")
+        admin_markup.add(InlineKeyboardButton("✅ ទទួលយក", callback_data=f"depapp_{user_id}"), InlineKeyboardButton("❌ បដិសេធ", callback_data=f"deprej_{user_id}"))
+        bot.send_photo(ADMIN_GROUP_ID, photo_id, caption=caption, parse_mode="Markdown", reply_markup=admin_markup)
     else:
         msg = bot.send_message(message.chat.id, "⚠️ សូមផ្ញើជាទម្រង់ **រូបភាព** (Photo) ប៉ុណ្ណោះ។ សូមផ្ញើវិក្កយបត្រម្ដងទៀត។", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_receipt)
 
-# មុខងារចាំទទួលការចុចប៊ូតុងរបស់ Admin នៅក្នុង Group
+# ----------------- ការគ្រប់គ្រងរបស់ ADMIN -----------------
 @bot.callback_query_handler(func=lambda call: call.data.startswith("depapp_") or call.data.startswith("deprej_") or call.data.startswith("topapp_") or call.data.startswith("toprej_"))
 def handle_admin_group_action(call):
     bot.answer_callback_query(call.id)
-    
     data_parts = call.data.split('_')
     action = data_parts[0]
-    user_id = data_parts[1]
+    user_id = int(data_parts[1])
     
-    # ករណី Admin ចុច ទទួលយកការដាក់ប្រាក់
+    # ទទួលយកការដាក់ប្រាក់
     if action == "depapp":
-        new_caption = (call.message.caption or "") + "\n\n✅ **ស្ថានភាព: បានទទួលយក (Approved)**"
-        bot.edit_message_caption(new_caption, chat_id=call.message.chat.id, message_id=call.message.message_id)
-        try: bot.send_message(user_id, "✅ **ការដាក់ប្រាក់របស់អ្នកទទួលបានជោគជ័យ!**\nទឹកប្រាក់ត្រូវបានបញ្ជាក់ដោយអ្នកគ្រប់គ្រង។", parse_mode="Markdown")
-        except: pass
-    
-    # ករណី Admin ចុច បដិសេធការដាក់ប្រាក់
+        msg = bot.send_message(call.message.chat.id, f"✅ អ្នកគ្រប់គ្រងសូមវាយ **ចំនួនទឹកប្រាក់** ដែលចង់បញ្ចូលឲ្យអតិថិជន `{user_id}` (ឧ. 5 ឬ 2.5):", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_deposit_amount, user_id, call.message)
+        
+    # បដិសេធការដាក់ប្រាក់
     elif action == "deprej":
-        new_caption = (call.message.caption or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ (Rejected)**"
-        bot.edit_message_caption(new_caption, chat_id=call.message.chat.id, message_id=call.message.message_id)
-        try: bot.send_message(user_id, "❌ **ការដាក់ប្រាក់របស់អ្នកត្រូវបានបដិសេធ!**\nសូមពិនិត្យមើលវិក្កយបត្រម្ដងទៀត ឬទាក់ទងអ្នកគ្រប់គ្រង (@PiSetHsPP)។", parse_mode="Markdown")
+        bot.edit_message_caption((call.message.caption or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
+        try: bot.send_message(user_id, "❌ **ការដាក់ប្រាក់ត្រូវបានបដិសេធ!**\nសូមពិនិត្យមើលវិក្កយបត្រម្ដងទៀត។")
         except: pass
         
-    # ករណី Admin ចុច បញ្ជាក់ការបញ្ជាទិញ Top Up
+    # បញ្ជាក់ការបញ្ជាទិញ
     elif action == "topapp":
-        new_text = (call.message.text or "") + "\n\n✅ **ស្ថានភាព: បានបញ្ជាក់ (Completed)**"
-        bot.edit_message_text(new_text, chat_id=call.message.chat.id, message_id=call.message.message_id)
-        try: bot.send_message(user_id, "✅ **ការបញ្ជាទិញ Top Up របស់អ្នកទទួលបានជោគជ័យ!**\nសូមចូលទៅពិនិត្យមើលក្នុងគណនីហ្គេមរបស់អ្នក។", parse_mode="Markdown")
+        amount = float(data_parts[2])
+        bot.edit_message_text((call.message.text or "") + "\n\n✅ **ស្ថានភាព: បានបញ្ជាក់រួចរាល់**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
+        try: bot.send_message(user_id, f"✅ **ការបញ្ជាទិញ Top Up របស់អ្នកទទួលបានជោគជ័យ!**\n(ទឹកប្រាក់ `${amount:.2f}` ត្រូវបានកាត់ចេញពីគណនីរួចរាល់)")
         except: pass
         
-    # ករណី Admin ចុច បដិសេធការបញ្ជាទិញ Top Up
+    # បដិសេធការបញ្ជាទិញ និងប្រគល់លុយវិញ
     elif action == "toprej":
-        new_text = (call.message.text or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ (Rejected)**"
-        bot.edit_message_text(new_text, chat_id=call.message.chat.id, message_id=call.message.message_id)
-        try: bot.send_message(user_id, "❌ **ការបញ្ជាទិញ Top Up របស់អ្នកត្រូវបានបដិសេធ!**\nសូមត្រួតពិនិត្យព័ត៌មានរបស់អ្នកម្ដងទៀត ឬទាក់ទងអ្នកគ្រប់គ្រង។", parse_mode="Markdown")
+        amount = float(data_parts[2])
+        if user_id not in user_balances: user_balances[user_id] = 0.0
+        user_balances[user_id] += amount # ប្រគល់លុយវិញ
+        bot.edit_message_text((call.message.text or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ (ប្រគល់លុយវិញ)**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
+        try: bot.send_message(user_id, f"❌ **ការបញ្ជាទិញត្រូវបានបដិសេធ!**\nទឹកប្រាក់ `${amount:.2f}` ត្រូវបានប្រគល់ចូលគណនីរបស់អ្នកវិញ។")
         except: pass
+
+def process_deposit_amount(message, user_id, original_call_message):
+    try:
+        amount = float(message.text)
+        if user_id not in user_balances: user_balances[user_id] = 0.0
+        user_balances[user_id] += amount
+        
+        bot.edit_message_caption((original_call_message.caption or "") + f"\n\n✅ **ស្ថានភាព: បានអនុម័ត និងបញ្ចូលលុយ ${amount:.2f}**", chat_id=original_call_message.chat.id, message_id=original_call_message.message_id, parse_mode="Markdown")
+        bot.send_message(user_id, f"✅ **ការដាក់ប្រាក់ជោគជ័យ!**\nអ្នកទទួលបានទឹកប្រាក់ចំនួន `${amount:.2f}` ចូលក្នុងគណនី។", parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"✅ បានបញ្ចូលលុយ `${amount:.2f}` ឲ្យអតិថិជនរូចរាល់។")
+    except ValueError:
+        bot.send_message(message.chat.id, "⚠️ លេខមិនត្រឹមត្រូវ។ សូមចុចប៊ូតុង ✅ ទទួលយក ម្ដងទៀតដើម្បីវាយចំនួនប្រាក់។")
 
 @bot.message_handler(func=lambda message: message.text == "👨‍💻 អ្នកគ្រប់គ្រង")
 def handle_admin(message):
-    bot.send_message(message.chat.id, "ប្រសិនបើអ្នកមានបញ្ហា ឬសំណួរផ្សេងៗ សូមទំនាក់ទំនងអ្នកគ្រប់គ្រងតាមរយៈ៖\n👉 @PiSetHsPP")
+    bot.send_message(message.chat.id, "ប្រសិនបើអ្នកមានបញ្ហា សូមទំនាក់ទំនង៖ 👉 @PiSetHsPP")
 
 @bot.message_handler(func=lambda message: message.text == "🔙 ត្រឡប់ក្រោយ")
 def handle_back(message):
