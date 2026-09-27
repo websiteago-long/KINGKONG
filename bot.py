@@ -11,7 +11,7 @@ ADMIN_GROUP_ID = "-1003875548933"
 user_balances = {}
 pending_orders = {}
 
-# តារាងតម្លៃកញ្ចប់ហ្គេមថ្មី
+# តារាងតម្លៃកញ្ចប់ហ្គេម (Roblox & Free Fire)
 PACKAGES = {
     "Roblox": [
         {"name": "80 Robux", "price": 1.00},
@@ -21,6 +21,16 @@ PACKAGES = {
         {"name": "400 Robux", "price": 5.00},
         {"name": "480 Robux", "price": 6.00},
         {"name": "560 Robux", "price": 7.00}
+    ],
+    "Free Fire": [
+        {"name": "💎 25", "price": 0.30},
+        {"name": "💎 100", "price": 0.95},
+        {"name": "💎 310", "price": 2.94},
+        {"name": "💎 520", "price": 4.80},
+        {"name": "💎 1060", "price": 8.85},
+        {"name": "💎 2180", "price": 18.50},
+        {"name": "💎 5600", "price": 47.99},
+        {"name": "💎 11500", "price": 95.00}
     ]
 }
 
@@ -65,14 +75,19 @@ def handle_topup_selection(message):
     game_name = message.text
     
     if game_name in PACKAGES:
-        markup = InlineKeyboardMarkup()
+        # រៀបចំប៊ូតុងឲ្យចេញជា ២ ជួរ
+        markup = InlineKeyboardMarkup(row_width=2)
+        buttons = []
         for i, pkg in enumerate(PACKAGES[game_name]):
             btn = InlineKeyboardButton(f"{pkg['name']} - ${pkg['price']:.2f}", callback_data=f"pkg_{game_name}_{i}")
-            markup.add(btn)
+            buttons.append(btn)
+        markup.add(*buttons) # ដាក់ប៊ូតុងទាំងអស់ចូលជា២ជួរ
+        
         bot.send_message(message.chat.id, f"🎮 សូមជ្រើសរើសកញ្ចប់ **{game_name}** ខាងក្រោម៖", parse_mode="Markdown", reply_markup=markup)
     else:
+        # សម្រាប់ Mobile Legends (មិនទាន់មានតារាងតម្លៃ)
         pending_orders[user_id] = {"game": game_name}
-        msg = bot.send_message(message.chat.id, f"🎮 អ្នកបានជ្រើសរើស: **{game_name}**\n\n💵 តើអ្នកចង់ Top Up អស់ប៉ុន្មានដុល្លារ? (សូមវាយតែលេខ ឧទាហរណ៍: 1.5, 5):", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, f"🎮 អ្នកបានជ្រើសរើស: **{game_name}**\n\n💵 តើអ្នកចង់ Top Up អស់ប៉ុន្មានដុល្លារ? (សូមវាយតែលេខ):", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_topup_amount)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("pkg_"))
@@ -93,7 +108,9 @@ def handle_package_selection(call):
         return
         
     pending_orders[user_id] = {"game": game_name, "amount": amount, "package_name": pkg_name}
-    msg = bot.send_message(call.message.chat.id, f"✅ អ្នកបានជ្រើសរើស **{pkg_name}** តម្លៃ **${amount:.2f}**\n\nសូមផ្ញើ **ID ហ្គេម ឬ ឈ្មោះតួអង្គ** របស់អ្នកមកកាន់ទីនេះ៖", parse_mode="Markdown")
+    
+    # សារទាមទារ Player ID
+    msg = bot.send_message(call.message.chat.id, f"✅ អ្នកបានជ្រើសរើស **{pkg_name}** តម្លៃ **${amount:.2f}**\n\nសូមផ្ញើ **Player ID** របស់អ្នកមកកាន់ទីនេះ៖", parse_mode="Markdown")
     bot.register_next_step_handler(msg, process_topup_id)
 
 def process_topup_amount(message):
@@ -117,7 +134,7 @@ def process_topup_amount(message):
         
     pending_orders[user_id]["amount"] = amount
     pending_orders[user_id]["package_name"] = "មិនមានបញ្ជាក់"
-    msg = bot.send_message(message.chat.id, "✅ លុយក្នុងគណនីគ្រប់គ្រាន់! សូមផ្ញើ **ID ហ្គេម ឬ ឈ្មោះតួអង្គ** របស់អ្នកមកកាន់ទីនេះ៖")
+    msg = bot.send_message(message.chat.id, "✅ លុយក្នុងគណនីគ្រប់គ្រាន់! សូមផ្ញើ **Player ID** របស់អ្នកមកកាន់ទីនេះ៖")
     bot.register_next_step_handler(msg, process_topup_id)
 
 def process_topup_id(message):
@@ -139,7 +156,7 @@ def process_topup_id(message):
     user_balances[user_id] -= amount
     bot.send_message(message.chat.id, f"✅ ការបញ្ជាទិញត្រូវបានបញ្ជូន! (ទឹកប្រាក់ `${amount:.2f}` ត្រូវបានកាត់បណ្ដោះអាសន្ន)\nសូមមេត្ដារងចាំការត្រួតពិនិត្យពីអ្នកគ្រប់គ្រងបន្តិច។", parse_mode="Markdown")
     
-    caption = f"🎮 **មានការបញ្ជាទិញ TOPUP ថ្មី**\n\n🕹 ហ្គេម: {game_name}\n📦 កញ្ចប់: {pkg_name}\n💵 តម្លៃកាត់ចេញ: `${amount:.2f}`\n📝 ID ហ្គេម: {game_id}\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
+    caption = f"🎮 **មានការបញ្ជាទិញ TOPUP ថ្មី**\n\n🕹 ហ្គេម: {game_name}\n📦 កញ្ចប់: {pkg_name}\n💵 តម្លៃកាត់ចេញ: `${amount:.2f}`\n📝 Player ID: `{game_id}`\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
     
     admin_markup = InlineKeyboardMarkup()
     admin_markup.add(InlineKeyboardButton("✅ បញ្ជាក់ការទិញ", callback_data=f"topapp_{user_id}_{amount}"), InlineKeyboardButton("❌ បដិសេធ", callback_data=f"toprej_{user_id}_{amount}"))
