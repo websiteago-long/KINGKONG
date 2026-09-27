@@ -11,11 +11,16 @@ ADMIN_GROUP_ID = "-1003875548933"
 user_balances = {}
 pending_orders = {}
 
-# តារាងតម្លៃកញ្ចប់ហ្គេម
+# តារាងតម្លៃកញ្ចប់ហ្គេមថ្មី
 PACKAGES = {
     "Roblox": [
         {"name": "80 Robux", "price": 1.00},
-        {"name": "160 Robux", "price": 1.99}
+        {"name": "160 Robux", "price": 2.00},
+        {"name": "240 Robux", "price": 3.00},
+        {"name": "320 Robux", "price": 4.00},
+        {"name": "400 Robux", "price": 5.00},
+        {"name": "480 Robux", "price": 6.00},
+        {"name": "560 Robux", "price": 7.00}
     ]
 }
 
@@ -32,6 +37,10 @@ def get_game_menu():
     markup.add(KeyboardButton("Roblox"), KeyboardButton("Mobile Legends"), KeyboardButton("Free Fire"))
     markup.add(KeyboardButton("🔙 ត្រឡប់ក្រោយ"))
     return markup
+
+@bot.message_handler(commands=['getid'])
+def send_id(message):
+    bot.send_message(message.chat.id, f"📍 ID របស់ទីតាំងនេះគឺ: `{message.chat.id}`", parse_mode="Markdown")
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -50,7 +59,6 @@ def handle_account(message):
 def handle_game_topup(message):
     bot.send_message(message.chat.id, "សូមជ្រើសរើសហ្គេមដែលអ្នកចង់ Top Up ខាងក្រោម៖", reply_markup=get_game_menu())
 
-# ----------------- មុខងារជ្រើសរើសហ្គេម -----------------
 @bot.message_handler(func=lambda message: message.text in ["Roblox", "Mobile Legends", "Free Fire"])
 def handle_topup_selection(message):
     user_id = message.from_user.id
@@ -128,25 +136,20 @@ def process_topup_id(message):
     username = message.from_user.username
     username_text = f"@{username}" if username else "មិនមាន"
     
-    # កាត់លុយ
     user_balances[user_id] -= amount
-    
     bot.send_message(message.chat.id, f"✅ ការបញ្ជាទិញត្រូវបានបញ្ជូន! (ទឹកប្រាក់ `${amount:.2f}` ត្រូវបានកាត់បណ្ដោះអាសន្ន)\nសូមមេត្ដារងចាំការត្រួតពិនិត្យពីអ្នកគ្រប់គ្រងបន្តិច។", parse_mode="Markdown")
     
     caption = f"🎮 **មានការបញ្ជាទិញ TOPUP ថ្មី**\n\n🕹 ហ្គេម: {game_name}\n📦 កញ្ចប់: {pkg_name}\n💵 តម្លៃកាត់ចេញ: `${amount:.2f}`\n📝 ID ហ្គេម: {game_id}\n\n🆔 ID អតិថិជន: `{user_id}`\n👤 Username: {username_text}"
     
     admin_markup = InlineKeyboardMarkup()
-    btn_approve = InlineKeyboardButton("✅ បញ្ជាក់ការទិញ", callback_data=f"topapp_{user_id}_{amount}")
-    btn_reject = InlineKeyboardButton("❌ បដិសេធ (ប្រគល់លុយវិញ)", callback_data=f"toprej_{user_id}_{amount}")
-    btn_msg = InlineKeyboardButton("💬 ផ្ញើសារទៅអតិថិជន", callback_data=f"sendmsg_{user_id}")
+    admin_markup.add(InlineKeyboardButton("✅ បញ្ជាក់ការទិញ", callback_data=f"topapp_{user_id}_{amount}"), InlineKeyboardButton("❌ បដិសេធ", callback_data=f"toprej_{user_id}_{amount}"))
+    admin_markup.add(InlineKeyboardButton("💬 ផ្ញើសារទៅអតិថិជន", callback_data=f"sendmsg_{user_id}"))
     
-    admin_markup.add(btn_approve, btn_reject)
-    admin_markup.add(btn_msg)
-    
-    try: bot.send_message(ADMIN_GROUP_ID, caption, parse_mode="Markdown", reply_markup=admin_markup)
-    except Exception: bot.send_message(message.chat.id, "⚠️ ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។")
+    try: 
+        bot.send_message(ADMIN_GROUP_ID, caption, parse_mode="Markdown", reply_markup=admin_markup)
+    except Exception as e: 
+        bot.send_message(message.chat.id, f"⚠️ ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។\n\n`Error: {e}`", parse_mode="Markdown")
 
-# ----------------- ចាប់ផ្ដើមការដាក់ប្រាក់ -----------------
 @bot.message_handler(func=lambda message: message.text == "💵 ដាក់ប្រាក់")
 def handle_deposit(message):
     markup = InlineKeyboardMarkup()
@@ -180,12 +183,14 @@ def process_receipt(message):
         admin_markup.add(InlineKeyboardButton("✅ ទទួលយក", callback_data=f"depapp_{user_id}"), InlineKeyboardButton("❌ បដិសេធ", callback_data=f"deprej_{user_id}"))
         admin_markup.add(InlineKeyboardButton("💬 ផ្ញើសារទៅអតិថិជន", callback_data=f"sendmsg_{user_id}"))
         
-        bot.send_photo(ADMIN_GROUP_ID, photo_id, caption=caption, parse_mode="Markdown", reply_markup=admin_markup)
+        try:
+            bot.send_photo(ADMIN_GROUP_ID, photo_id, caption=caption, parse_mode="Markdown", reply_markup=admin_markup)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"⚠️ ប្រព័ន្ធមានបញ្ហាក្នុងការបញ្ជូនទៅកាន់អ្នកគ្រប់គ្រង។\n\n`Error: {e}`", parse_mode="Markdown")
     else:
         msg = bot.send_message(message.chat.id, "⚠️ សូមផ្ញើជាទម្រង់ **រូបភាព** (Photo) ប៉ុណ្ណោះ។ សូមផ្ញើវិក្កយបត្រម្ដងទៀត។", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_receipt)
 
-# ----------------- ការគ្រប់គ្រងរបស់ ADMIN -----------------
 @bot.callback_query_handler(func=lambda call: call.data.startswith("depapp_") or call.data.startswith("deprej_") or call.data.startswith("topapp_") or call.data.startswith("toprej_") or call.data.startswith("sendmsg_"))
 def handle_admin_group_action(call):
     bot.answer_callback_query(call.id)
@@ -196,18 +201,15 @@ def handle_admin_group_action(call):
     if action == "depapp":
         msg = bot.send_message(call.message.chat.id, f"✅ អ្នកគ្រប់គ្រងសូមវាយ **ចំនួនទឹកប្រាក់** ដែលចង់បញ្ចូលឲ្យអតិថិជន `{user_id}`:", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_deposit_amount, user_id, call.message)
-        
     elif action == "deprej":
         bot.edit_message_caption((call.message.caption or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
         try: bot.send_message(user_id, "❌ **ការដាក់ប្រាក់ត្រូវបានបដិសេធ!**\nសូមពិនិត្យមើលវិក្កយបត្រម្ដងទៀត។")
         except: pass
-        
     elif action == "topapp":
         amount = float(data_parts[2])
         bot.edit_message_text((call.message.text or "") + "\n\n✅ **ស្ថានភាព: បានបញ្ជាក់រួចរាល់**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
         try: bot.send_message(user_id, f"✅ **ការបញ្ជាទិញ Top Up របស់អ្នកទទួលបានជោគជ័យ!**\n(ទឹកប្រាក់ `${amount:.2f}` ត្រូវបានកាត់ចេញពីគណនីរួចរាល់)")
         except: pass
-        
     elif action == "toprej":
         amount = float(data_parts[2])
         if user_id not in user_balances: user_balances[user_id] = 0.0
@@ -215,8 +217,6 @@ def handle_admin_group_action(call):
         bot.edit_message_text((call.message.text or "") + "\n\n❌ **ស្ថានភាព: បានបដិសេធ (ប្រគល់លុយវិញ)**", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown")
         try: bot.send_message(user_id, f"❌ **ការបញ្ជាទិញត្រូវបានបដិសេធ!**\nទឹកប្រាក់ `${amount:.2f}` ត្រូវបានប្រគល់ចូលគណនីរបស់អ្នកវិញ។")
         except: pass
-        
-    # មុខងារថ្មី៖ ផ្ញើសារទៅអតិថិជន
     elif action == "sendmsg":
         msg = bot.send_message(call.message.chat.id, f"✏️ **សូមវាយសារដែលអ្នកចង់ផ្ញើទៅកាន់អតិថិជន (ID: `{user_id}`):**", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_admin_message, user_id)
@@ -233,7 +233,6 @@ def process_deposit_amount(message, user_id, original_call_message):
         amount = float(message.text)
         if user_id not in user_balances: user_balances[user_id] = 0.0
         user_balances[user_id] += amount
-        
         bot.edit_message_caption((original_call_message.caption or "") + f"\n\n✅ **ស្ថានភាព: បានអនុម័ត និងបញ្ចូលលុយ ${amount:.2f}**", chat_id=original_call_message.chat.id, message_id=original_call_message.message_id, parse_mode="Markdown")
         bot.send_message(user_id, f"✅ **ការដាក់ប្រាក់ជោគជ័យ!**\nអ្នកទទួលបានទឹកប្រាក់ចំនួន `${amount:.2f}` ចូលក្នុងគណនី។", parse_mode="Markdown")
         bot.send_message(message.chat.id, f"✅ បានបញ្ចូលលុយ `${amount:.2f}` ឲ្យអតិថិជនរូចរាល់។")
